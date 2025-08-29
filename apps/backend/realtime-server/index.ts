@@ -13,30 +13,39 @@
   const subscriber = redisClient.duplicate();
 
   async function initializeRedisSubscription() {
-    await subscriber.connect();
+    // Only connect if not already connected
+    if (subscriber.status !== 'ready' && subscriber.status !== 'connecting' && subscriber.status !== 'connect') {
+      await subscriber.connect();
+    }
 
-    // Subscribe to all market channels from price-poller
-    // This listens to: market:BTCUSDT, market:ETHUSDT, market:SOLUSDT
-    await subscriber.psubscribe('market:*', (message, channel) => {
+    // Set up pattern message listener before subscribing
+    subscriber.on('pmessage', (pattern: string, channel: string, message: string | Buffer) => {
+        // Convert message to string if it's a Buffer
+        const messageStr = message instanceof Buffer ? message.toString() : String(message);
+        const channelStr = String(channel);
+        
         // Type guards to ensure we have valid data
-        // Type guards to ensure we have valid string data
-        if (!message || !channel || typeof message !== 'string' || typeof channel !== 'string') {
-            console.log('Received invalid message or channel');
+        if (!messageStr || !channelStr) {
+            console.log('Received empty message or channel');
             return;
         }
         
-        console.log(`📈 Price update from ${channel}`);
+        console.log(`📈 Price update from ${channelStr}`);
 
         // Extract symbol from channel (market:BTCUSDT -> BTCUSDT)
-        const symbol = channel.split(':')[1];
+        const symbol = channelStr.split(':')[1];
         if (!symbol) {
-            console.log('Could not extract symbol from channel:', channel);
+            console.log('Could not extract symbol from channel:', channelStr);
             return;
         }
 
         // Broadcast to ALL connected frontend clients
-        broadcastToAllClients(symbol, message);
+        broadcastToAllClients(symbol, messageStr);
     });
+
+    // Subscribe to all market channels from price-poller
+    // This listens to: market:BTCUSDT, market:ETHUSDT, market:SOLUSDT
+    await subscriber.psubscribe('market:*');
 
         console.log('✅ Subscribed to Redis market channels (market:*)');
     }
@@ -94,8 +103,12 @@
     }
   }
 
-  // Handle graceful shutdown
+  // Handle graceful shutdown (only register once)
+  let isShuttingDown = false;
   process.on('SIGINT', () => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+    
     console.log('\n🛑 Shutting down realtime server...');
     wss.close(() => {
       console.log('✅ WebSocket server closed');

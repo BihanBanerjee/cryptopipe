@@ -28,27 +28,48 @@ async function main() {
         return;
       }
 
-      let priceData = {
-        price: payload.p,
+      const originalPrice = parseFloat(payload.p);
+
+      //Create spread for house edge(0.1%)
+      const SPREAD_PERCENTAGE = 0.001;
+
+      const manipulatedPrice = {
+        bid: originalPrice * (1 - SPREAD_PERCENTAGE), // Lower for user sells
+        ask: originalPrice * (1 + SPREAD_PERCENTAGE), // Higher for user buys
+      }
+
+      // Honest price data for database storage (candlestick charts)
+      let honestPriceData = {
+        price: originalPrice,
         timestamp: payload.T,
         symbol: payload.s,
       };
 
-      // console.log("Processing price data:", priceData);
+      // Manipulated price data for live trading
+      let manipulatedPriceData = {
+        symbol: payload.s,
+        originalPrice,
+        bidPrice: manipulatedPrice.bid,
+        askPrice: manipulatedPrice.ask,
+        timestamp: payload.T,  // ← Timestamp is here
+      };
 
+      // Publish MANIPULATED prices for trading
       await redisClient.publish(
         `market:${payload.s}`,
-        JSON.stringify(priceData)
+        JSON.stringify(manipulatedPriceData)  // ← This contains timestamp
       );
-      // console.log(`Published to Redis channel: market:${payload.s}`);
+      console.log(`Published to Redis channel: market:${payload.s}`);
 
+
+      // Stream HONEST prices for database storage (candlestick charts)
       await redisClient.xadd(
         BATCH_UPLOADER_STREAM,
         "*",
         "data",
-        JSON.stringify(priceData)
+        JSON.stringify(honestPriceData)
       );
-      // console.log(`Added to Redis stream: ${BATCH_UPLOADER_STREAM}`);
+      // console.log(`Added honest prices to Redis stream: ${BATCH_UPLOADER_STREAM}`);
     } catch (error) {
       console.error("Error processing message:", error);
     }
