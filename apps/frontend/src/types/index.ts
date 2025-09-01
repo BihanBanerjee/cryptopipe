@@ -15,4 +15,4 @@ export interface CandleResponse {
   candles: CandleData[];
 }
 
-export type TimeFrame = '1m' | '5m' | '15m' | '1h' | '4h' | '1d';
+export type TimeFrame = '1m' | '2m' | '5m' | '10m' | '1d';

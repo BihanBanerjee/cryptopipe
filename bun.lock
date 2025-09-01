@@ -53,6 +53,16 @@
         "typescript-eslint": "^8.40.0",
       },
     },
+    "packages/prisma-client": {
+      "name": "@repo/prisma-client",
+      "version": "0.0.0",
+      "dependencies": {
+        "@prisma/client": "^6.14.0",
+      },
+      "devDependencies": {
+        "typescript": "^5",
+      },
+    },
     "packages/redis-client": {
       "name": "@repo/redis-client",
       "dependencies": {
@@ -226,6 +236,8 @@
     "@prisma/get-platform": ["@prisma/get-platform@6.14.0", "", { "dependencies": { "@prisma/debug": "6.14.0" } }, "sha512-7VjuxKNwjnBhKfqPpMeWiHEa2sVjYzmHdl1slW6STuUCe9QnOY0OY1ljGSvz6wpG4U8DfbDqkG1yofd/1GINww=="],
 
     "@repo/eslint-config": ["@repo/eslint-config@workspace:packages/eslint-config"],
+
+    "@repo/prisma-client": ["@repo/prisma-client@workspace:packages/prisma-client"],
 
     "@repo/redis-client": ["@repo/redis-client@workspace:packages/redis-client"],
 

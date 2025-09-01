@@ -4,34 +4,82 @@ import { useState } from 'react';
 import InstrumentPanel from './InstrumentPanel';
 import TradingChart from './TradingChart';
 import { TimeFrame } from '../types';
+import { useWebSocket } from '../hooks/useWebSocket';
 
 export default function TradingDashboard() {
   const [isOrderPanelOpen, setIsOrderPanelOpen] = useState(false);
   const [selectedTimeFrame, setSelectedTimeFrame] = useState<TimeFrame>('5m');
   const [selectedSymbol, setSelectedSymbol] = useState('BTC');
+  
+  // Only get WebSocket data for the price header
+  const { priceData } = useWebSocket();
   return (
-    <div className="h-screen bg-gray-900 text-white flex">
+    <div className="h-screen bg-gray-900 text-white flex overflow-hidden">
       {/* Left Panel - Instruments */}
-      <div className="bg-gray-800 border-r border-gray-700 relative" style={{ minWidth: '280px', width: '320px' }} id="instruments-container">
+      <div className="bg-gray-800 border-r border-gray-700 relative flex-shrink-0" style={{ minWidth: '280px', width: '320px', maxWidth: '600px' }} id="instruments-container">
         <div className="p-4 border-b border-gray-700">
-          <h2 className="text-lg font-semibold">INSTRUMENTS</h2>
+          <div className="flex items-center space-x-3">
+            {/* Logo */}
+            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-purple-600 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-lg">⚡</span>
+            </div>
+            {/* Platform Name */}
+            <div>
+              <h2 className="text-lg font-bold text-white">TradeBeast</h2>
+            </div>
+          </div>
         </div>
         <InstrumentPanel />
       </div>
 
       {/* Center Panel - Chart + Positions */}
-      <div className="flex-1 flex flex-col">
+      <div className="flex-1 flex flex-col min-w-0">
         {/* Chart Header */}
         <div className="h-12 bg-gray-800 border-b border-gray-700 flex items-center px-4">
+          {/* Asset Tabs */}
+          <div className="flex items-center space-x-1 mr-6">
+            {(['BTC', 'SOL', 'ETH'] as const).map((asset) => (
+              <button
+                key={asset}
+                onClick={() => setSelectedSymbol(asset)}
+                className={`px-3 py-1.5 text-sm font-medium rounded transition-colors ${
+                  selectedSymbol === asset 
+                    ? 'bg-blue-600 text-white border border-blue-500' 
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600 hover:text-white border border-transparent'
+                }`}
+              >
+                {asset}/USDT
+              </button>
+            ))}
+          </div>
+          
           <div className="flex items-center space-x-4">
             <span className="text-yellow-400 font-semibold">{selectedSymbol}/USDT</span>
-            <span className="text-green-400">$50,000.00</span>
-            <span className="text-green-400 text-sm">+0.5%</span>
+            {(() => {
+              const fullSymbol = `${selectedSymbol.toUpperCase()}USDT`;
+              const currentPrice = priceData[fullSymbol];
+              const price = currentPrice?.originalPrice || currentPrice?.askPrice || 0;
+              const isUp = currentPrice?.isUp ?? true;
+              
+              return (
+                <>
+                  <span className={`font-mono ${isUp ? 'text-green-400' : 'text-red-400'}`}>
+                    ${price > 0 ? price.toLocaleString(undefined, { 
+                      minimumFractionDigits: 2, 
+                      maximumFractionDigits: selectedSymbol === 'BTC' ? 2 : 3 
+                    }) : '---'}
+                  </span>
+                  <span className={`text-sm ${isUp ? 'text-green-400' : 'text-red-400'}`}>
+                    {isUp ? '+' : ''}0.5%
+                  </span>
+                </>
+              );
+            })()}
           </div>
           
           {/* Timeframe buttons */}
           <div className="ml-auto flex space-x-2">
-            {(['1m', '5m', '15m', '1h', '4h', '1d'] as TimeFrame[]).map((timeframe) => (
+            {(['1m', '2m', '5m', '10m', '1d'] as TimeFrame[]).map((timeframe) => (
               <button
                 key={timeframe}
                 onClick={() => setSelectedTimeFrame(timeframe)}
@@ -48,7 +96,7 @@ export default function TradingDashboard() {
         </div>
         
         {/* Chart Area */}
-        <div className="flex-1 bg-gray-900 relative">
+        <div className="flex-1 bg-gray-900 relative min-w-0 overflow-hidden">
           {/* Order Panel Toggle Button */}
           {!isOrderPanelOpen && (
             <button
@@ -90,7 +138,7 @@ export default function TradingDashboard() {
 
       {/* Right Panel - Order Panel */}
       {isOrderPanelOpen && (
-        <div className="w-80 bg-gray-800 border-l border-gray-700 animate-slide-in-right">
+        <div className="w-80 bg-gray-800 border-l border-gray-700 animate-slide-in-right flex-shrink-0">
           {/* Order Panel Header with Close Button */}
           <div className="flex items-center justify-between p-4 border-b border-gray-700">
             <h3 className="text-lg font-semibold text-white">Order Panel</h3>

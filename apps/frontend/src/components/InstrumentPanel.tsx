@@ -34,58 +34,65 @@ export default function InstrumentPanel() {
     <div className="h-full flex flex-col relative group" style={{ minWidth: '280px' }}>
       {/* Resize Handle */}
       <div 
-        className="absolute top-0 right-0 w-1 h-full bg-transparent hover:bg-blue-500 cursor-col-resize z-10 group-hover:bg-gray-500"
+        className="absolute top-0 right-0 w-2 h-full bg-gray-600/30 hover:bg-blue-500/70 cursor-col-resize z-20 transition-colors border-r border-gray-500"
         onMouseDown={(e) => {
           e.preventDefault();
+          e.stopPropagation();
+          
           const startX = e.clientX;
           const container = document.getElementById('instruments-container');
-          const startWidth = container?.offsetWidth || 320;
+          
+          if (!container) {
+            console.error('instruments-container not found');
+            return;
+          }
+          
+          const startWidth = container.offsetWidth;
+          console.log('Starting resize from width:', startWidth);
           
           const handleMouseMove = (moveEvent: MouseEvent) => {
-            const newWidth = Math.max(280, Math.min(600, startWidth + (moveEvent.clientX - startX)));
-            const container = document.getElementById('instruments-container');
+            moveEvent.preventDefault();
+            const deltaX = moveEvent.clientX - startX;
+            
+            // Calculate maximum width to ensure chart remains visible
+            const viewportWidth = window.innerWidth;
+            const minChartWidth = 400; // Minimum width for chart visibility
+            const orderPanelWidth = 320; // Width of order panel when open
+            const maxAllowedWidth = Math.min(600, viewportWidth - minChartWidth - orderPanelWidth);
+            
+            const newWidth = Math.max(280, Math.min(maxAllowedWidth, startWidth + deltaX));
+            
             if (container) {
               container.style.width = `${newWidth}px`;
+              console.log('New width:', newWidth, 'Max allowed:', maxAllowedWidth);
+              
+              // Trigger a resize event to update the chart
+              window.dispatchEvent(new Event('resize'));
             }
           };
           
           const handleMouseUp = () => {
+            console.log('Resize ended');
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
           };
+          
+          // Prevent text selection during drag
+          document.body.style.cursor = 'col-resize';
+          document.body.style.userSelect = 'none';
           
           document.addEventListener('mousemove', handleMouseMove);
           document.addEventListener('mouseup', handleMouseUp);
         }}
+        title="Drag to resize panel"
       />
       
-      {/* Search bar */}
-      <div className="p-4 border-b border-gray-700 mt-12">
-        <div className="relative">
-          <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Search"
-            className="w-full pl-10 pr-3 py-2 bg-gray-700 text-white text-sm rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
-          />
-        </div>
-      </div>
-
-      {/* Favorites section */}
-      <div className="p-4 border-b border-gray-700">
-        <button className="flex items-center justify-between w-full text-left text-gray-300 hover:text-white rounded p-2 hover:bg-gray-700">
-          <span className="text-sm">Favorites</span>
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-            <path fillRule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clipRule="evenodd" />
-          </svg>
-        </button>
-      </div>
 
       {/* Column Headers */}
-      <div className="px-4 py-3 border-b border-gray-700 bg-gray-750">
-        <div className="grid gap-2 text-xs text-gray-400 font-medium" style={{ gridTemplateColumns: '1fr 60px 100px 100px' }}>
+      <div className="px-4 py-3 border-b border-gray-700 bg-gray-750 mt-12">
+        <div className="grid gap-0 text-xs text-gray-400 font-medium" style={{ gridTemplateColumns: '1fr 40px 100px 100px' }}>
           <span>Symbol</span>
           <span className="text-center">Signal</span>
           <span className="text-center">Bid</span>
@@ -97,7 +104,7 @@ export default function InstrumentPanel() {
       <div className="flex-1 overflow-y-auto">
         {instruments.map((instrument) => (
           <div key={instrument.symbol} className="px-4 py-3 hover:bg-gray-700/50 cursor-pointer border-b border-gray-700/30 transition-colors">
-            <div className="grid gap-2 items-center" style={{ gridTemplateColumns: '1fr 60px 100px 100px' }}>
+            <div className="grid gap-0 items-center" style={{ gridTemplateColumns: '1fr 40px 100px 100px' }}>
               {/* Symbol with icon */}
               <div className="flex items-center space-x-3 min-w-0">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-lg font-bold flex-shrink-0 ${
@@ -118,7 +125,7 @@ export default function InstrumentPanel() {
 
               {/* Signal indicator */}
               <div className="flex justify-center">
-                <div className={`w-6 h-6 rounded flex items-center justify-center ${
+                <div className={`w-full h-6 rounded flex items-center justify-center ${
                   instrument.isUp ? 'bg-green-500' : 'bg-red-500'
                 }`}>
                   <svg className="w-4 h-4 text-white" fill="currentColor" viewBox="0 0 20 20">

@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState } from 'react';
-import { createChart, ColorType, CandlestickSeries, HistogramSeries } from 'lightweight-charts';
-import { CandleData, CandleResponse, TimeFrame } from '../types';
+import { useEffect, useRef, useCallback } from 'react';
+import { createChart, ColorType, IChartApi, Time, CandlestickSeries, ISeriesApi } from 'lightweight-charts';
+import { TimeFrame } from '../types';
+import { useWebSocket } from '../hooks/useWebSocket';
+
 
 interface TradingChartProps {
   symbol?: string;
@@ -10,59 +12,77 @@ interface TradingChartProps {
   onTimeFrameChange?: (timeFrame: TimeFrame) => void;
 }
 
+interface CandleData {
+  time: number;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+}
+
 export default function TradingChart({ 
   symbol = 'BTC', 
-  timeFrame = '5m',
-  onTimeFrameChange 
+  timeFrame = '5m'
 }: TradingChartProps) {
   const chartContainerRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<any>(null);
-  const candlestickSeriesRef = useRef<any>(null);
-  const volumeSeriesRef = useRef<any>(null);
+  const chartRef = useRef<IChartApi | null>(null);
+  const candlestickSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null);
   
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [hasData, setHasData] = useState(false);
+  // Move WebSocket connection directly to this component
+  const { priceData } = useWebSocket();
 
-  // Fetch candle data from backend
-  const fetchCandleData = async (asset: string, duration: TimeFrame) => {
+  // Simple data fetch
+  const fetchData = useCallback(async () => {
     try {
-      setIsLoading(true);
-      setError(null);
-
-      // Get data for last 24 hours by default
-      const endTime = new Date();
-      const startTime = new Date(endTime.getTime() - 24 * 60 * 60 * 1000);
-
       const params = new URLSearchParams({
-        asset,
-        duration,
-        startTime: startTime.toISOString(),
-        endTime: endTime.toISOString()
+        asset: symbol,
+        duration: timeFrame
       });
 
       const response = await fetch(`http://localhost:3002/candles?${params}`);
+      const data = await response.json();
       
-      if (!response.ok) {
-        throw new Error(`Failed to fetch data: ${response.statusText}`);
+      // Debug: Check what timestamps we're receiving from API
+      if (data.candles && data.candles.length > 0) {
+        const sampleCandle = data.candles[0];
+        console.log('📊 Sample API timestamp:', {
+          rawTime: sampleCandle.time,
+          asDate: new Date(sampleCandle.time * 1000),
+          asLocalString: new Date(sampleCandle.time * 1000).toString(),
+          asISOString: new Date(sampleCandle.time * 1000).toISOString(),
+          currentTime: new Date().toString(),
+          currentUTC: new Date().toISOString(),
+        });
       }
-
-      const data: CandleResponse = await response.json();
-      console.log('Fetched candle data:', data);
-      return data.candles;
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Failed to fetch candle data';
-      setError(errorMessage);
-      console.error('Error fetching candle data:', err);
-      return [];
-    } finally {
-      setIsLoading(false);
+      
+      if (data.candles && candlestickSeriesRef.current) {
+        const formattedCandles = data.candles.map((candle: CandleData) => {
+          // Convert UTC timestamp to local timezone using official approach
+          // The API returns UTC timestamps, we need to convert to local time
+          const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+          const zonedDate = new Date(new Date(candle.time * 1000).toLocaleString('en-US', { timeZone }));
+          const localTimestamp = zonedDate.getTime() / 1000;
+          
+          return {
+            time: localTimestamp as Time,
+            open: candle.open,
+            high: candle.high,
+            low: candle.low,
+            close: candle.close,
+          };
+        });
+        
+        candlestickSeriesRef.current.setData(formattedCandles);
+        chartRef.current?.timeScale().fitContent();
+      }
+    } catch (error) {
+      console.error('Error fetching data:', error);
     }
-  };
+  }, [symbol, timeFrame]);
 
   // Initialize chart
   useEffect(() => {
-    if (!chartContainerRef.current || typeof window === 'undefined') return;
+    if (!chartContainerRef.current) return;
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
@@ -73,20 +93,21 @@ export default function TradingChart({
         vertLines: { color: '#374151' },
         horzLines: { color: '#374151' },
       },
-      crosshair: {
-        mode: 1,
-      },
-      rightPriceScale: {
-        borderColor: '#374151',
-      },
       timeScale: {
-        borderColor: '#374151',
         timeVisible: true,
         secondsVisible: false,
+        // Use tickMarkFormatter for proper timezone display
+        tickMarkFormatter: (time: number) => {
+          const date = new Date(time * 1000);
+          return date.toLocaleTimeString('en-US', { 
+            hour: '2-digit', 
+            minute: '2-digit',
+            hour12: false 
+          });
+        },
       },
     });
 
-    // Create candlestick series
     const candlestickSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#10b981',
       downColor: '#ef4444',
@@ -96,128 +117,104 @@ export default function TradingChart({
       wickUpColor: '#10b981',
     });
 
-    // Create volume series
-    const volumeSeries = chart.addSeries(HistogramSeries, {
-      color: '#6b7280',
-      priceFormat: {
-        type: 'volume',
-      },
-      priceScaleId: '',
-    });
-
-    // Position volume series at bottom
-    try {
-      chart.priceScale('').applyOptions({
-        scaleMargins: {
-          top: 0.7,
-          bottom: 0,
-        },
-      });
-    } catch (e) {
-      console.warn('Could not configure volume scale:', e);
-    }
-
     chartRef.current = chart;
     candlestickSeriesRef.current = candlestickSeries;
-    volumeSeriesRef.current = volumeSeries;
 
-    // Handle chart resize
+    // Load data
+    fetchData();
+
+    // Handle resize with ResizeObserver for better performance
     const handleResize = () => {
-      if (chartContainerRef.current && chartRef.current) {
-        chartRef.current.applyOptions({
-          width: chartContainerRef.current.clientWidth,
-          height: chartContainerRef.current.clientHeight,
+      if (chartContainerRef.current && chart) {
+        const { clientWidth, clientHeight } = chartContainerRef.current;
+        chart.applyOptions({
+          width: clientWidth,
+          height: clientHeight,
         });
+        chart.timeScale().fitContent();
       }
     };
 
-    window.addEventListener('resize', handleResize);
+    // Use ResizeObserver to detect container size changes
+    let resizeObserver: ResizeObserver | null = null;
+    if (window.ResizeObserver) {
+      resizeObserver = new ResizeObserver(handleResize);
+      resizeObserver.observe(chartContainerRef.current);
+    } else {
+      window.addEventListener('resize', handleResize);
+    }
+
+    // Initial size
+    setTimeout(handleResize, 100); // Small delay to ensure DOM is ready
 
     return () => {
-      window.removeEventListener('resize', handleResize);
-      if (chartRef.current) {
-        chartRef.current.remove();
-        chartRef.current = null;
+      if (resizeObserver) {
+        resizeObserver.disconnect();
+      } else {
+        window.removeEventListener('resize', handleResize);
       }
+      chart.remove();
     };
-  }, []);
+  }, [fetchData]);
 
-  // Load data when symbol or timeframe changes
+  // Load data when symbol/timeframe changes
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    fetchData();
+  }, [fetchData]);
+
+  // Real-time updates - Update the last candle with live price
+  useEffect(() => {
+    const fullSymbol = `${symbol.toUpperCase()}USDT`;
+    const currentPrice = priceData[fullSymbol];
     
-    const loadData = async () => {
-      const candles = await fetchCandleData(symbol, timeFrame);
+    console.log(`🔴 CHART: Checking real-time update for ${fullSymbol}:`, {
+      currentPrice,
+      hasSeriesRef: !!candlestickSeriesRef.current,
+      symbol,
+      timeFrame,
+      priceValue: currentPrice?.originalPrice
+    });
+    
+    if (currentPrice?.originalPrice && candlestickSeriesRef.current) {
+      const price = currentPrice.originalPrice;
       
-      if (candlestickSeriesRef.current && volumeSeriesRef.current) {
-        if (candles.length > 0) {
-          // Set candlestick data
-          candlestickSeriesRef.current.setData(candles);
+      console.log(`🟢 CHART: Updating last candle for ${fullSymbol} with live price: ${price}`);
+      
+      try {
+        // Get current data from the series to find the last candle
+        const seriesData = (candlestickSeriesRef.current as unknown as { data: () => CandleData[] }).data();
+        
+        if (seriesData && seriesData.length > 0) {
+          // Get the last candle time
+          const lastCandle = seriesData[seriesData.length - 1];
+          const lastCandleTime = lastCandle.time;
           
-          // Set volume data
-          const volumeData = candles.map(candle => ({
-            time: candle.time,
-            value: candle.volume,
-            color: candle.close >= candle.open ? '#10b98180' : '#ef444480'
-          }));
-          volumeSeriesRef.current.setData(volumeData);
-
-          // Fit content to chart
-          if (chartRef.current) {
-            chartRef.current.timeScale().fitContent();
-          }
-          setHasData(true);
+          console.log('🕐 Real-time update - Last candle time:', lastCandleTime, 'Current price timestamp:', currentPrice.timestamp);
+          
+          // Update the last candle with current price as close
+          // Also update high/low if the new price exceeds them
+          const updatedCandle = {
+            time: lastCandleTime as Time,
+            open: lastCandle.open,
+            high: Math.max(lastCandle.high || price, price),
+            low: Math.min(lastCandle.low || price, price),
+            close: price,
+          };
+          
+          candlestickSeriesRef.current.update(updatedCandle);
+          console.log(`✅ CHART: Successfully updated last candle for ${fullSymbol}`, updatedCandle);
         } else {
-          // Clear the chart when no data
-          candlestickSeriesRef.current.setData([]);
-          volumeSeriesRef.current.setData([]);
-          setHasData(false);
-          console.log('No candle data available for', symbol, timeFrame);
+          console.log(`🟡 CHART: No existing candle data to update for ${fullSymbol}`);
         }
+      } catch (error) {
+        console.error('🚨 CHART: Failed to update last candle:', error);
       }
-    };
+    }
+  }, [priceData, symbol, timeFrame]);
 
-    loadData();
-  }, [symbol, timeFrame]);
-
-  if (error) {
-    return (
-      <div className="h-full flex items-center justify-center text-red-400 bg-gray-900">
-        <div className="text-center">
-          <div className="text-4xl mb-2">�</div>
-          <div className="text-lg mb-2">Error loading chart</div>
-          <div className="text-sm opacity-80">{error}</div>
-          <button 
-            onClick={() => fetchCandleData(symbol, timeFrame)}
-            className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-white text-sm transition-colors"
-          >
-            Retry
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
-    <div className="relative h-full w-full">
-      {isLoading && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75 z-10">
-          <div className="text-center text-white">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500 mx-auto mb-2"></div>
-            <div className="text-sm">Loading chart data...</div>
-          </div>
-        </div>
-      )}
-      {!isLoading && !error && !hasData && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-900 bg-opacity-75 z-10">
-          <div className="text-center text-yellow-400">
-            <div className="text-4xl mb-2">📊</div>
-            <div className="text-lg mb-2">No Data Available</div>
-            <div className="text-sm opacity-80">No {timeFrame} candle data found for {symbol}</div>
-            <div className="text-xs opacity-60 mt-2">Try a different timeframe or ensure data is being collected</div>
-          </div>
-        </div>
-      )}
+    <div className="h-full w-full">
       <div ref={chartContainerRef} className="h-full w-full" />
     </div>
   );
