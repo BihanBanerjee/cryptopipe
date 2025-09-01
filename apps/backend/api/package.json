@@ -6,6 +6,8 @@
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
     "@types/bun": "latest",
+    "@types/cookie-parser": "^1.4.9",
+    "@types/cors": "^2.8.19",
     "@types/jsonwebtoken": "^9.0.10"
   },
   "peerDependencies": {

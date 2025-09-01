@@ -1,13 +1,13 @@
 import express from "express";
 import cors from "cors";
-import cookieParser from "cookie-parser";
+import cookieParser from "cookie-parser"; 
 import dotenv from "dotenv";
 import { authRouter } from "./routes/auth";
 import { candleRouter } from "./routes/candles";
 import { orderRouter } from "./routes/order";
 
 const app = express();
-const port = 3001;
+const port = process.env.API_PORT || 3002;
 dotenv.config();
 app.use(cors({ credentials: true }));
 app.use(express.json());
