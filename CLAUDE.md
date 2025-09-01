@@ -8,7 +8,7 @@ This is a Turborepo monorepo using Bun as the package manager. The project conta
 
 ### Applications
 - **`apps/web`**: Next.js 15 frontend application (React 19, TypeScript)
-- **`apps/backend/http-backend`**: Express.js HTTP API server with authentication endpoints
+- **`apps/backend/api`**: Express.js HTTP API server with authentication endpoints
 - **`apps/backend/price-poller`**: WebSocket client for real-time cryptocurrency price data from Binance
 
 ### Shared Packages
@@ -68,13 +68,13 @@ bun run lint --filter=web
 #### Backend Services
 ```bash
 # Run HTTP backend directly
-cd apps/backend/http-backend && bun run index.ts
+cd apps/backend/api && bun run src/index.ts
 
 # Run price poller directly  
 cd apps/backend/price-poller && bun run index.ts
 
 # Or use Turbo filters from root
-bun run dev --filter=http-backend
+bun run dev --filter=api
 bun run dev --filter=backend  # price-poller package name
 ```
 

@@ -5,9 +5,9 @@ import { BATCH_UPLOADER_STREAM } from "./config";
 const SUPPORTED_PAIRS = ["btcusdt", "solusdt", "ethusdt"];
 
 async function main() {
-  const ws = new WebSocket("wss://stream.binance.com:9443/ws");
+  const ws = new WebSocket("wss://stream.binance.com:9443/ws"); // creating a web socket client connection to binance streams.
 
-  ws.onopen = () => {
+  ws.onopen = () => { // onopen is an event handler (not a method) that gets triggered when the WebSocket connection is successfully established with the Binance server.
     console.log("connected to binance");
     const subscribeMessage = {
       method: "SUBSCRIBE",
@@ -15,7 +15,7 @@ async function main() {
       id: 1,
     };
     // console.log("Subscribing to:", subscribeMessage);
-    ws.send(JSON.stringify(subscribeMessage));
+    ws.send(JSON.stringify(subscribeMessage)); // stringifying the subscribeMessage object because WebSocket can only send text or binary data, not JavaScript objects.
   };
 
   ws.onmessage = async ({ data }) => {
@@ -23,12 +23,13 @@ async function main() {
       const payload = JSON.parse(data.toString());
       // console.log("Raw payload:", payload);
 
-      if (!payload.p || !payload.T || !payload.s) {
-        // console.log("Skipping payload - missing price/timestamp/symbol");
+      if (!payload.p || !payload.T || !payload.s || !payload.q) {
+        // console.log("Skipping payload - missing price/timestamp/symbol/quantity");
         return;
       }
 
       const originalPrice = parseFloat(payload.p);
+      const quantity = parseFloat(payload.q);
 
       //Create spread for house edge(0.1%)
       const SPREAD_PERCENTAGE = 0.001;
@@ -41,17 +42,20 @@ async function main() {
       // Honest price data for database storage (candlestick charts)
       let honestPriceData = {
         price: originalPrice,
+        quantity: quantity,
         timestamp: payload.T,
         symbol: payload.s,
       };
 
       // Manipulated price data for live trading
+      // Note: Keeping decimal prices here for direct use by order controller
+      // The order controller will convert these to integers for precise calculations
       let manipulatedPriceData = {
         symbol: payload.s,
         originalPrice,
         bidPrice: manipulatedPrice.bid,
         askPrice: manipulatedPrice.ask,
-        timestamp: payload.T,  // ← Timestamp is here
+        timestamp: payload.T,
       };
 
       // Publish MANIPULATED prices for trading

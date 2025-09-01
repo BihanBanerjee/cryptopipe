@@ -1,9 +1,9 @@
 import redisClient from "@repo/redis-client";
-import { PrismaClient } from "../../../generated/prisma";
+import prisma from "@repo/prisma-client";
 import { BATCH_UPLOADER_STREAM, CONSUMER_GROUP } from "./config";
 import type { PriceData } from "./types";
+import { toInteger } from "../../../apps/backend/api/src/utils/price";
 
-const prisma = new PrismaClient();
 
 export async function processBatch(streamData: any[]) {
   const trades: PriceData[] = [];
@@ -18,6 +18,7 @@ export async function processBatch(streamData: any[]) {
         const tradeData = JSON.parse(fields[dataIndex + 1]);
         trades.push({
           price: tradeData.price,
+          quantity: tradeData.quantity,
           timestamp: tradeData.timestamp,
           symbol: tradeData.symbol,
         });
@@ -37,12 +38,8 @@ export async function processBatch(streamData: any[]) {
       const insertData = trades.map(trade => ({
         time: new Date(trade.timestamp), // Convert Unix timestamp to Date
         symbol: trade.symbol,
-        price: parseFloat(trade.price), // Convert string to number for Decimal
-        // OHLC fields remain null initially, will be calculated by materialized views
-        high: null,
-        low: null,
-        open: null,
-        close: null
+        priceInt: toInteger(parseFloat(trade.price)), // Convert to BigInt integer
+        qtyInt: toInteger(parseFloat(trade.quantity)), // Convert to BigInt integer
       }));
 
       await prisma.trade.createMany({

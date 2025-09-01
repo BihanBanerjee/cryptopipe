@@ -1,0 +1,12 @@
+{
+  "name": "@repo/prisma-client",
+  "version": "0.0.0",
+  "private": true,
+  "main": "index.ts",
+  "dependencies": {
+    "@prisma/client": "^6.14.0"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}

@@ -14,15 +14,61 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum token {
+  BTCUSDT
+  SOLUSDT
+  ETHUSDT
+}
+
+enum orderStatus {
+  OPEN
+  CLOSED
+}
+
+enum position {
+  LONG
+  PUT
+}
+
+model User {
+  id        String    @id @default(uuid())
+  email     String    @unique
+  phone     Int       @unique
+  password  String
+  balance   Balance?
+  order     Order[]
+}
+
+model Balance {
+  id        String    @id @default(uuid())
+  balanceInt BigInt   @default(100000000000) // 1000.00000000 * 10^8
+  userId    String    @unique
+  user      User      @relation(fields: [userId], references: [id])
+}
+
+model Order {
+  orderId   String    @id @default(uuid())
+  status    orderStatus
+  orderType position
+  asset     token
+  leverage  Int       @default(1)
+  marginInt BigInt    // Margin amount as integer (scaled by 10^8)
+  buyPriceInt BigInt  // Buy price as integer (scaled by 10^8)
+  qtyInt    BigInt    // Quantity as integer (scaled by 10^8)
+  stopLossInt BigInt  @default(0) // Stop loss price as integer
+  takeProfitInt BigInt @default(0) // Take profit price as integer
+  createdAt DateTime  @default(now())
+  finalPnLInt BigInt  @default(0) // Final P&L as integer
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+}
+
 model Trade {
   id        String    @default(cuid())
   time      DateTime  @db.Timestamptz
   symbol    String
-  price     Decimal   @db.Decimal(20, 8)
-  high      Decimal?  @db.Decimal(20, 8)
-  low       Decimal?  @db.Decimal(20, 8)  
-  open      Decimal?  @db.Decimal(20, 8)
-  close     Decimal?  @db.Decimal(20, 8)
+  priceInt  BigInt    // Price as integer (scaled by 10^8)
+  qtyInt    BigInt    // Quantity as integer (scaled by 10^8)
   createdAt DateTime  @default(now())
 
   @@id([id, time])
